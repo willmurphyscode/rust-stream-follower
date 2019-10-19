@@ -4,10 +4,12 @@ extern crate regex;
 extern crate serde;
 extern crate twitter_stream;
 
-use std::collections::HashMap;
-
 use regex::Regex;
 use serde::{Deserialize, Serialize};
+use std::fmt;
+use std::sync::mpsc;
+use std::sync::mpsc::{Receiver, Sender};
+use std::thread;
 
 use twitter_stream::rt::{self, Future, Stream};
 use twitter_stream::{Token, TwitterStreamBuilder};
@@ -23,10 +25,42 @@ enum Sentinment {
     Negative,
 }
 
+#[derive(Serialize, Deserialize, Debug)]
+#[serde(rename_all = "camelCase")]
 struct Mood {
+    keyword: String,
     positive_count: u64,
     neutral_count: u64,
     negative_count: u64,
+}
+
+impl Mood {
+    fn new(keyword: &str) -> Mood {
+        Mood {
+            keyword: keyword.to_string(),
+            positive_count: 0,
+            neutral_count: 0,
+            negative_count: 0,
+        }
+    }
+
+    fn update(&mut self, sentiment: Sentinment) {
+        match sentiment {
+            Sentinment::Positive => self.positive_count += 1,
+            Sentinment::Neutral => self.neutral_count += 1,
+            Sentinment::Negative => self.negative_count += 1,
+        }
+    }
+}
+
+impl fmt::Display for Mood {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "{}: +:{}, ~:{} -:{}",
+            self.keyword, self.positive_count, self.neutral_count, self.negative_count
+        )
+    }
 }
 
 lazy_static! {
@@ -50,7 +84,10 @@ fn main() {
         fetch_env_var("ACCESS_SECRET"), //"access_secret",
     );
 
-    let mut current_sentiments: HashMap<&str, Mood> = HashMap::new();
+    let mut moods: Vec<Mood> = Vec::with_capacity(KEYWORDS.len());
+    KEYWORDS.iter().for_each(|word| moods.push(Mood::new(word)));
+
+    let (tx, rx): (Sender<Tweet>, Receiver<Tweet>) = mpsc::channel();
 
     let future = TwitterStreamBuilder::filter(token)
         .track(Some(
@@ -59,18 +96,43 @@ fn main() {
         .listen()
         .unwrap()
         .flatten_stream()
-        .for_each(|json| {
-            let tweet: Tweet = serde_json::from_str(&json).unwrap();
-            println!("Text of tweet: {}", tweet.text);
+        .for_each(move |json| {
+            let tweet: Result<Tweet, _> = serde_json::from_str(&json);
+            if let Ok(ok_tweet) = tweet {
+                let send_result = tx.send(ok_tweet);
+                if let Err(error) = send_result {
+                    panic!(error);
+                }
+            }
             Ok(())
         })
         .map_err(|e| println!("error: {}", e));
 
+    thread::spawn(move || {
+        println!("Listening for tweets...");
+        let mut exery_13th = 064;
+        for msg in rx {
+            exery_13th += 1;
+            update_sentiments(&msg.text, &mut moods);
+            if exery_13th % 13 == 0 {
+                moods.iter().for_each(|m| println!("{}", m));
+                println!("===========");
+            }
+        }
+    });
     rt::run(future);
 }
 
 fn fetch_env_var(name: &str) -> String {
     std::env::var(name).expect(&format!("Must configure {}", name))
+}
+
+fn update_sentiments(tweet_text: &str, current_sentiments: &mut Vec<Mood>) {
+    for mood in current_sentiments.iter_mut() {
+        if tweet_text.contains(&mood.keyword) {
+            mood.update(classify(tweet_text));
+        }
+    }
 }
 
 fn classify(text: &str) -> Sentinment {
