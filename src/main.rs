@@ -1,3 +1,7 @@
+#![feature(proc_macro_hygiene, decl_macro)]
+#[macro_use]
+extern crate rocket;
+
 #[macro_use]
 extern crate lazy_static;
 extern crate regex;
@@ -5,10 +9,12 @@ extern crate serde;
 extern crate twitter_stream;
 
 use regex::Regex;
+use rocket::State;
 use serde::{Deserialize, Serialize};
 use std::fmt;
 use std::sync::mpsc;
 use std::sync::mpsc::{Receiver, Sender};
+use std::sync::{Arc, Mutex};
 use std::thread;
 
 use twitter_stream::rt::{self, Future, Stream};
@@ -84,9 +90,6 @@ fn main() {
         fetch_env_var("ACCESS_SECRET"), //"access_secret",
     );
 
-    let mut moods: Vec<Mood> = Vec::with_capacity(KEYWORDS.len());
-    KEYWORDS.iter().for_each(|word| moods.push(Mood::new(word)));
-
     let (tx, rx): (Sender<Tweet>, Receiver<Tweet>) = mpsc::channel();
 
     let future = TwitterStreamBuilder::filter(token)
@@ -108,17 +111,34 @@ fn main() {
         })
         .map_err(|e| println!("error: {}", e));
 
+    let mut moods: Vec<Mood> = Vec::with_capacity(KEYWORDS.len());
+    KEYWORDS.iter().for_each(|word| moods.push(Mood::new(word)));
     thread::spawn(move || {
         println!("Listening for tweets...");
-        let mut exery_13th = 064;
-        for msg in rx {
-            exery_13th += 1;
-            update_sentiments(&msg.text, &mut moods);
-            if exery_13th % 13 == 0 {
-                moods.iter().for_each(|m| println!("{}", m));
-                println!("===========");
+
+        let current_json: Arc<Mutex<String>> = Arc::new(Mutex::new("".to_string()));
+        let json = current_json.clone();
+
+        thread::spawn(move || {
+            let mut exery_13th = 0u64;
+            for msg in rx {
+                exery_13th += 1;
+                update_sentiments(&msg.text, &mut moods);
+                if exery_13th % 13 == 0 {
+                    if let Ok(mut locked_json) = current_json.try_lock() {
+                        *locked_json =
+                            serde_json::to_string(&moods).expect("could not serialize moods");
+                    }
+                }
             }
-        }
+        });
+
+        thread::spawn(move || {
+            rocket::ignite()
+                .mount("/", routes![sentiment_handler])
+                .manage(json)
+                .launch();
+        });
     });
     rt::run(future);
 }
@@ -143,4 +163,13 @@ fn classify(text: &str) -> Sentinment {
         return Sentinment::Negative;
     }
     Sentinment::Neutral
+}
+
+#[get("/")]
+fn sentiment_handler(mood_state: State<Arc<Mutex<String>>>) -> String {
+    let arc = mood_state.inner();
+    if let Ok(locked_string) = arc.lock() {
+        return locked_string.to_string();
+    }
+    "Error".to_string()
 }
