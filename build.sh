@@ -23,4 +23,4 @@ pushd "web/stream-plotter" > /dev/null
 	fi
 popd
 
-ROCKET_PORT="$ROCKET_PORT" cargo run
+cargo build --release
