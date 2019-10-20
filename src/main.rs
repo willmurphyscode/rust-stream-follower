@@ -167,12 +167,12 @@ fn classify(text: &str) -> Sentinment {
 }
 
 #[get("/current")]
-fn sentiment_handler(mood_state: State<Arc<Mutex<String>>>) -> String {
+fn sentiment_handler(mood_state: State<Arc<Mutex<String>>>) -> content::Json<String> {
     let arc = mood_state.inner();
     if let Ok(locked_string) = arc.lock() {
-        return locked_string.to_string();
+        return content::Json(locked_string.to_string());
     }
-    "Error".to_string()
+    content::Json("[]".to_string())
 }
 
 #[get("/")]

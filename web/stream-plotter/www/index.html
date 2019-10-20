@@ -11,7 +11,7 @@
 	<div>
 		<h1 class="centered">Plotters WebAssembly Demo</h1>
 		<div id="coord" class='centered' style='color: grey; font-size: 10px; height: 15px'></div>
-		<canvas id="canvas" class="centered" height=400 width=600></canvas>
+		<canvas id="canvas" class="centered" height=600 width=400></canvas>
 		<div id="status" class='centered' style='color: grey; font-size: 10px'>Loading WebAssembly...</div>
 		<div style="margin-top:20px"></div>
 		<div class="control">
@@ -124,8 +124,8 @@
 					map_coord = undefined;
 					var start = performance.now();
 					var buffer = document.createElement("canvas");
-					buffer.height = 400;
-					buffer.width = 600;
+					buffer.height = 600;
+					buffer.width = 400;
 					map_coord = wasm.draw_data(buffer, sampleInput);
 					document.getElementById("canvas").getContext("2d").drawImage(buffer, 0, 0);
 
@@ -138,18 +138,14 @@
 
 			update_plot();
 
-			setInterval(() => fetch("/current", {
-				'headers': {
-					'Content-Type': 'application/json'
-				}
-			})
+			setInterval(() => fetch("/current")
 				.then(response => response.json().then(json => {
 					sampleInput = JSON.stringify(json);
 					console.log(sampleInput);
 					update_plot();
 				}))
 				.catch(error => console.log(error)),
-				2000);
+				250);
 
 			sel.addEventListener("change", function (e) {
 				update_plot();
