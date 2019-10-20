@@ -78,10 +78,6 @@ lazy_static! {
 }
 
 fn main() {
-    // TEMP - make sure I can parse tweets
-    let b = include_str!("./sample_tweet.json");
-    let tweet: Tweet = serde_json::from_str(b).unwrap();
-    println!("{:?}", tweet);
 
     // Attach to some stream and print the text of all the tweets
     let token = Token::new(
