@@ -9,6 +9,7 @@ extern crate serde;
 extern crate twitter_stream;
 
 use regex::Regex;
+use rocket::response::content;
 use rocket::State;
 use serde::{Deserialize, Serialize};
 use std::fmt;
@@ -109,7 +110,7 @@ fn main() {
             }
             Ok(())
         })
-        .map_err(|e| println!("error: {}", e));
+        .map_err(|e| eprintln!("error: {}", e));
 
     let mut moods: Vec<Mood> = Vec::with_capacity(KEYWORDS.len());
     KEYWORDS.iter().for_each(|word| moods.push(Mood::new(word)));
@@ -120,11 +121,11 @@ fn main() {
         let json = current_json.clone();
 
         thread::spawn(move || {
-            let mut exery_13th = 0u64;
+            let mut exery_nth = 0u64;
             for msg in rx {
-                exery_13th += 1;
+                exery_nth += 1;
                 update_sentiments(&msg.text, &mut moods);
-                if exery_13th % 13 == 0 {
+                if exery_nth % 13 == 0 {
                     if let Ok(mut locked_json) = current_json.try_lock() {
                         *locked_json =
                             serde_json::to_string(&moods).expect("could not serialize moods");
@@ -135,7 +136,7 @@ fn main() {
 
         thread::spawn(move || {
             rocket::ignite()
-                .mount("/", routes![sentiment_handler])
+                .mount("/", routes![index, sentiment_handler, get_wasm, get_js])
                 .manage(json)
                 .launch();
         });
@@ -165,11 +166,29 @@ fn classify(text: &str) -> Sentinment {
     Sentinment::Neutral
 }
 
-#[get("/")]
+#[get("/current")]
 fn sentiment_handler(mood_state: State<Arc<Mutex<String>>>) -> String {
     let arc = mood_state.inner();
     if let Ok(locked_string) = arc.lock() {
         return locked_string.to_string();
     }
     "Error".to_string()
+}
+
+#[get("/")]
+fn index() -> content::Html<&'static str> {
+    let result = include_str!("../web/stream-plotter/www/index.html");
+    content::Html(result)
+}
+
+#[get("/plot.wasm")]
+fn get_wasm() -> &'static [u8] {
+    let result = include_bytes!("../web/stream-plotter/www/pkg/stream_plotter_bg.wasm");
+    result
+}
+
+#[get("/stream_plotter.js")]
+fn get_js() -> content::JavaScript<&'static str> {
+    let result = include_str!("../web/stream-plotter/www/pkg/stream_plotter.js");
+    content::JavaScript(result)
 }
