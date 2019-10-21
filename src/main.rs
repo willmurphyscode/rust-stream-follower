@@ -58,6 +58,12 @@ impl Mood {
             Sentinment::Negative => self.negative_count += 1,
         }
     }
+
+    fn clear(&mut self) {
+        self.positive_count = 0;
+        self.neutral_count = 0;
+        self.negative_count = 0;
+    }
 }
 
 impl fmt::Display for Mood {
@@ -78,7 +84,6 @@ lazy_static! {
 }
 
 fn main() {
-
     // Attach to some stream and print the text of all the tweets
     let token = Token::new(
         fetch_env_var("API_KEY"),       //"consumer_key",
@@ -117,15 +122,20 @@ fn main() {
         let json = current_json.clone();
 
         thread::spawn(move || {
-            let mut exery_nth = 0u64;
+            let mut every_nth = 0u64;
             for msg in rx {
-                exery_nth += 1;
+                every_nth += 1;
                 update_sentiments(&msg.text, &mut moods);
-                if exery_nth % 13 == 0 {
+                if every_nth % 13 == 0 {
                     if let Ok(mut locked_json) = current_json.try_lock() {
                         *locked_json =
                             serde_json::to_string(&moods).expect("could not serialize moods");
                     }
+                }
+
+                if every_nth == 50_000 {
+                    clear_sentiments(&mut moods);
+                    every_nth = 0;
                 }
             }
         });
@@ -149,6 +159,12 @@ fn update_sentiments(tweet_text: &str, current_sentiments: &mut Vec<Mood>) {
         if tweet_text.contains(&mood.keyword) {
             mood.update(classify(tweet_text));
         }
+    }
+}
+
+fn clear_sentiments(sentiments: &mut Vec<Mood>) {
+    for mood in sentiments.iter_mut() {
+        mood.clear();
     }
 }
 
