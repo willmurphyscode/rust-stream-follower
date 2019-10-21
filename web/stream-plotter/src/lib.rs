@@ -13,7 +13,6 @@ pub use data_plot::draw_data;
 pub fn make_coord_mapping_closure<T: Into<f64> + 'static>(
     map_func: Option<Box<dyn Fn((i32, i32)) -> Option<(T, T)>>>,
 ) -> JsValue {
-    web_sys::console::log_1(&"Hello, world!".into());
     if let Some(mapping_func) = map_func {
         let closure = Closure::wrap(Box::new(move |x: i32, y: i32, idx: u32| {
             if let Some((x, y)) = mapping_func((x, y)) {

@@ -21,12 +21,16 @@ impl Mood {
         let y_offset = y * Y_RANK_SCALE;
         (VERTICAL_CENTER_X_COORD, y_offset)
     }
+
+    fn total_tweets(&self) -> u64 {
+        self.positive_count + self.neutral_count + self.negative_count
+    }
 }
 
 const NEUTRAL_SCALEDOWN: i32 = 5;
 const NEUTRAL_HEIGHT: i32 = 30;
 const Y_RANK_SCALE: i32 = 40;
-const VERTICAL_CENTER_X_COORD: i32 = 200;
+const VERTICAL_CENTER_X_COORD: i32 = 150;
 
 fn rank_and_item_to_rectangle(y_rank: usize, mood: &Mood) -> Rectangle<(i32, i32)> {
     let center = mood.center(y_rank);
@@ -116,9 +120,9 @@ fn start_plotting2(
     root.fill(&WHITE)?;
 
     let mut chart = ChartBuilder::on(&root)
-        .x_label_area_size(35)
+        .x_label_area_size(45)
         .y_label_area_size(40)
-        .margin(5)
+        .margin(10)
         .build_ranged(0u32..10u32, 0u32..10u32)?;
 
     chart
@@ -126,7 +130,7 @@ fn start_plotting2(
         .disable_x_mesh()
         .disable_y_mesh()
         .line_style_1(&WHITE.mix(0.3))
-        .x_label_offset(30)
+        .x_label_offset(50)
         .y_desc("Volume of Tweets")
         .x_desc("Sentiment")
         .axis_desc_style(("Arial", 15).into_font())
@@ -137,16 +141,74 @@ fn start_plotting2(
     }
 
     for (index, mood) in to_draw.iter().rev().enumerate() {
-        root.draw(&text_element_to_draw(index, mood))?;
-    }
-
-    for (index, mood) in to_draw.iter().rev().enumerate() {
         root.draw(&right_whiskers_to_draw(index, mood))?;
     }
 
     for (index, mood) in to_draw.iter().rev().enumerate() {
         root.draw(&left_whiskers_to_draw(index, mood))?;
     }
+
+    for (index, mood) in to_draw.iter().rev().enumerate() {
+        root.draw(&text_element_to_draw(index, mood))?;
+    }
+
+    let total_processed = to_draw
+        .iter()
+        .fold(0u64, |sum, val| sum + val.total_tweets());
+
+    let tweets_processed_text = Text::new(
+        format!("Tweets processed: {}", total_processed).to_string(),
+        (250, 510),
+        ("Georiga", 15).into_font(),
+    );
+
+    root.draw(&tweets_processed_text)?;
+
+    let legend = Text::new("Legend:", (80, 460), ("Georiga", 15).into_font());
+
+    root.draw(&legend)?;
+
+    let legend_green = Text::new("Positive:", (80, 480), ("Georiga", 12).into_font());
+    root.draw(&legend_green)?;
+
+    let green_sample = Rectangle::new(
+        [(140, 482), (160, 490)],
+        ShapeStyle {
+            filled: true,
+            stroke_width: 1,
+            color: plotters::style::GREEN.to_rgba(),
+        },
+    );
+
+    root.draw(&green_sample)?;
+
+    let legend_yellow = Text::new("Neutral / 5:", (80, 495), ("Georiga", 12).into_font());
+    root.draw(&legend_yellow)?;
+
+    let yellow_sample = Rectangle::new(
+        [(140, 497), (160, 505)],
+        ShapeStyle {
+            filled: true,
+            stroke_width: 1,
+            color: plotters::style::YELLOW.to_rgba(),
+        },
+    );
+
+    root.draw(&yellow_sample)?;
+
+    let legend_red = Text::new("Negative:", (80, 510), ("Georiga", 12).into_font());
+    root.draw(&legend_red)?;
+
+    let red_sample = Rectangle::new(
+        [(140, 512), (160, 520)],
+        ShapeStyle {
+            filled: true,
+            stroke_width: 1,
+            color: plotters::style::RED.to_rgba(),
+        },
+    );
+
+    root.draw(&red_sample)?;
 
     Ok(Box::new(chart.into_coord_trans()))
 }
